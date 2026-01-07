@@ -5,11 +5,15 @@ import { Link } from 'react-router-dom';
 
 interface AnimeCardProps {
   anime: Anime;
+  link?: string;
+  subtitle?: React.ReactNode;
 }
 
-export const AnimeCard: React.FC<AnimeCardProps> = ({ anime }) => {
+export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, link, subtitle }) => {
+  const targetLink = link || `/anime/${anime.id}`;
+
   return (
-    <Link to={`/anime/${anime.id}`} className="group relative flex flex-col gap-2 w-full max-w-[200px] mx-auto cursor-pointer">
+    <Link to={targetLink} className="group relative flex flex-col gap-2 w-full max-w-[200px] mx-auto cursor-pointer">
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg shadow-md transition-all duration-300 group-hover:shadow-xl group-hover:shadow-brand-500/20">
         <img 
           src={anime.thumbnail} 
@@ -47,9 +51,9 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ anime }) => {
         <h3 className="text-sm md:text-base font-semibold text-slate-800 dark:text-gray-100 line-clamp-1 group-hover:text-brand-500 transition-colors">
           {anime.title}
         </h3>
-        <p className="text-xs text-slate-500 dark:text-gray-400">
-          {anime.genres.slice(0, 2).join(', ')}
-        </p>
+        <div className="text-xs text-slate-500 dark:text-gray-400 line-clamp-1">
+          {subtitle || anime.genres.slice(0, 2).join(', ')}
+        </div>
       </div>
     </Link>
   );

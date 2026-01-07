@@ -16,7 +16,6 @@ import { User, Anime } from './types';
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [animeList, setAnimeList] = useState<Anime[]>([]);
-  const [isDark, setIsDark] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -39,17 +38,7 @@ function App() {
     if (savedUser) {
       setUser(JSON.parse(savedUser));
     }
-
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setIsDark(true);
-      document.documentElement.classList.add('dark');
-    }
   }, [fetchData]);
-
-  const toggleTheme = () => {
-    setIsDark(!isDark);
-    document.documentElement.classList.toggle('dark');
-  };
 
   const handleLogin = (email: string, pass: string) => {
     // Basic local login simulation
@@ -109,7 +98,7 @@ function App() {
 
   if (loading && animeList.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-500"></div>
       </div>
     );
@@ -117,11 +106,11 @@ function App() {
 
   return (
     <Router>
-      <div className="flex flex-col min-h-screen">
-        <Navbar user={user} onLogout={handleLogout} isDark={isDark} toggleTheme={toggleTheme} />
+      <div className="flex flex-col min-h-screen bg-slate-950 text-gray-100">
+        <Navbar user={user} onLogout={handleLogout} />
         <main className="flex-grow">
           <Routes>
-            <Route path="/" element={<Home animeList={animeList} />} />
+            <Route path="/" element={<Home animeList={animeList} user={user} />} />
             <Route path="/browse" element={<Browse animeList={animeList} />} />
             <Route path="/trending" element={<Trending animeList={animeList} />} />
             <Route path="/anime/:id" element={<AnimeDetails />} />
@@ -133,7 +122,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>
-        <footer className="bg-white dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 py-8 text-center text-slate-500 text-sm">
+        <footer className="bg-slate-950 border-t border-slate-800 py-8 text-center text-slate-500 text-sm">
           <p>&copy; {new Date().getFullYear()} Anime India. All rights reserved.</p>
         </footer>
       </div>

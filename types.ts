@@ -22,8 +22,9 @@ export interface Anime {
   episodes: Episode[];
   featured?: boolean;
   trending?: boolean;
-  isFanFavorite?: boolean; // New field for Home Page "Fan Favorites" section
+  isFanFavorite?: boolean;
   isHindiDub?: boolean;
+  isTrendingNo1?: boolean; // New field for Trending #1 tag
   releaseYear?: number;
 }
 

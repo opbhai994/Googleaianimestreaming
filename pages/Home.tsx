@@ -1,20 +1,49 @@
 import React, { useMemo } from 'react';
-import { Anime } from '../types';
+import { Anime, User } from '../types';
 import { HeroSlider } from '../components/HeroSlider';
 import { AnimeCard } from '../components/AnimeCard';
 import { Button } from '../components/Button';
 import { Link } from 'react-router-dom';
-import { Flame, TrendingUp, Languages, Heart } from 'lucide-react';
+import { Flame, TrendingUp, Languages, Heart, Clock } from 'lucide-react';
 
 interface HomeProps {
   animeList: Anime[];
+  user: User | null;
 }
 
-export const Home: React.FC<HomeProps> = ({ animeList }) => {
-  const featured = useMemo(() => animeList.filter(a => a.featured), [animeList]);
+export const Home: React.FC<HomeProps> = ({ animeList, user }) => {
+  // Prioritize Trending #1 items, then standard featured items
+  const featured = useMemo(() => {
+    return animeList
+      .filter(a => a.featured || a.isTrendingNo1)
+      .sort((a, b) => (b.isTrendingNo1 ? 1 : 0) - (a.isTrendingNo1 ? 1 : 0));
+  }, [animeList]);
+  
   const trending = useMemo(() => animeList.filter(a => a.trending).slice(0, 12), [animeList]);
   const hindiDubbed = useMemo(() => animeList.filter(a => a.isHindiDub).slice(0, 12), [animeList]);
   const fanFavorites = useMemo(() => animeList.filter(a => a.isFanFavorite).slice(0, 12), [animeList]);
+
+  const continueWatching = useMemo(() => {
+    if (!user || !user.watchHistory || user.watchHistory.length === 0) return [];
+    
+    return [...user.watchHistory]
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .map(historyItem => {
+        const anime = animeList.find(a => a.id === historyItem.animeId);
+        if (!anime) return null;
+        
+        const episode = anime.episodes.find(e => e.id === historyItem.episodeId);
+        
+        return {
+          anime,
+          episode,
+          // Link directly to the specific episode, or anime page if ep missing
+          link: episode ? `/watch/${anime.id}/${episode.id}` : `/anime/${anime.id}`,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .slice(0, 6); // Limit to top 6 recently watched
+  }, [user, animeList]);
 
   return (
     <div className="min-h-screen pb-20">
@@ -22,6 +51,40 @@ export const Home: React.FC<HomeProps> = ({ animeList }) => {
 
       <div className="container mx-auto px-4 mt-12 space-y-16">
         
+        {/* Continue Watching Section */}
+        {continueWatching.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-brand-100 dark:bg-brand-900/30 rounded-lg text-brand-600 dark:text-brand-400">
+                  <Clock size={24} />
+                </div>
+                <div>
+                   <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Continue Watching</h2>
+                   <p className="text-sm text-slate-500 dark:text-gray-400">Pick up where you left off</p>
+                </div>
+              </div>
+              <Link to="/profile">
+                <Button variant="ghost" size="sm" className="uppercase text-xs tracking-wider">View History</Button>
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
+              {continueWatching.map(({ anime, episode, link }) => (
+                <AnimeCard 
+                  key={`history-${anime.id}`} 
+                  anime={anime} 
+                  link={link}
+                  subtitle={
+                    <span className="text-brand-500 font-bold flex items-center gap-1">
+                      <Clock size={12} /> {episode ? `Episode ${episode.number}` : 'Continue'}
+                    </span>
+                  }
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Trending Section */}
         {trending.length > 0 && (
           <section>

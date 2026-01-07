@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Anime } from '../types';
-import { Play, Info, Languages } from 'lucide-react';
+import { Play, Info, Languages, Flame } from 'lucide-react';
 import { Button } from './Button';
 import { Link } from 'react-router-dom';
 
@@ -39,10 +39,18 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({ featured }) => {
       <div className="absolute inset-0 flex items-center">
         <div className="container mx-auto px-4 md:px-8">
           <div className="max-w-2xl space-y-4 animate-fadeIn">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              {/* Trending #1 Tag */}
+              {currentAnime.isTrendingNo1 && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-400 text-black text-xs font-black uppercase tracking-wider rounded-sm shadow-lg shadow-yellow-500/20 animate-pulse">
+                  <Flame size={14} fill="currentColor" /> Trending #1
+                </span>
+              )}
+              
               <span className="inline-block px-3 py-1 bg-brand-500 text-white text-xs font-bold uppercase tracking-wider rounded-sm">
                 Featured
               </span>
+              
               {currentAnime.isHindiDub && (
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-white/10 backdrop-blur-md text-brand-400 text-xs font-bold uppercase tracking-wider rounded-sm border border-brand-400/30 shadow-lg">
                   <Languages size={14} /> Hindi Dubbed
