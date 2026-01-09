@@ -1,4 +1,4 @@
-import { Anime, Episode } from '../types';
+import { Anime } from '../types';
 
 const KITSU_API_URL = 'https://kitsu.io/api/edge';
 

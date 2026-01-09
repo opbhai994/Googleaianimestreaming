@@ -1,12 +1,16 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Anime, Episode } from '../types';
+import { Anime, User } from '../types';
 import { getAnimeById } from '../services/data';
-import { Play, Star, Calendar, Share2, Plus, Layers } from 'lucide-react';
+import { Play, Star, Calendar, Share2, Plus, Layers, Bookmark, Check } from 'lucide-react';
 import { Button } from '../components/Button';
 
-export const AnimeDetails: React.FC = () => {
+interface AnimeDetailsProps {
+  user?: User | null;
+  onToggleWatchlist?: (animeId: string) => void;
+}
+
+export const AnimeDetails: React.FC<AnimeDetailsProps> = ({ user, onToggleWatchlist }) => {
   const { id } = useParams<{ id: string }>();
   const [anime, setAnime] = useState<Anime | undefined>();
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
@@ -45,6 +49,11 @@ export const AnimeDetails: React.FC = () => {
       .sort((a, b) => a.number - b.number);
   }, [anime, selectedSeason]);
 
+  const isInWatchlist = useMemo(() => {
+    if (!user || !user.watchlist || !anime) return false;
+    return user.watchlist.includes(anime.id);
+  }, [user, anime]);
+
   if (loading) return (
     <div className="p-20 flex justify-center">
        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-500"></div>
@@ -63,6 +72,16 @@ export const AnimeDetails: React.FC = () => {
   const handleSeasonChange = (season: number) => {
     setSelectedSeason(season);
     setVisibleEpisodesCount(12); 
+  };
+
+  const handleWatchlistClick = () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    if (onToggleWatchlist) {
+      onToggleWatchlist(anime.id);
+    }
   };
 
   return (
@@ -116,8 +135,19 @@ export const AnimeDetails: React.FC = () => {
                     </Button>
                  </Link>
                )}
-               <Button variant="secondary" className="gap-2">
-                 <Share2 size={18} /> Share
+               
+               {/* Watchlist Button */}
+               <Button 
+                 variant={isInWatchlist ? "outline" : "secondary"} 
+                 className={`gap-2 ${isInWatchlist ? "border-green-500 text-green-500 bg-green-500/10" : ""}`}
+                 onClick={handleWatchlistClick}
+               >
+                 {isInWatchlist ? <Check size={18} /> : <Bookmark size={18} />} 
+                 {isInWatchlist ? 'Saved' : 'Add to List'}
+               </Button>
+               
+               <Button variant="ghost" className="gap-2 text-slate-400 hover:text-white">
+                 <Share2 size={18} />
                </Button>
              </div>
           </div>

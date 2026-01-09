@@ -3,8 +3,8 @@ import { Anime, User } from '../types';
 import { HeroSlider } from '../components/HeroSlider';
 import { AnimeCard } from '../components/AnimeCard';
 import { Button } from '../components/Button';
-import { Link } from 'react-router-dom';
-import { Flame, TrendingUp, Languages, Heart, Clock } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Flame, TrendingUp, Languages, Heart, Clock, MessageSquare } from 'lucide-react';
 
 interface HomeProps {
   animeList: Anime[];
@@ -12,6 +12,8 @@ interface HomeProps {
 }
 
 export const Home: React.FC<HomeProps> = ({ animeList, user }) => {
+  const navigate = useNavigate();
+
   // Prioritize Trending #1 items, then standard featured items
   const featured = useMemo(() => {
     return animeList
@@ -19,9 +21,10 @@ export const Home: React.FC<HomeProps> = ({ animeList, user }) => {
       .sort((a, b) => (b.isTrendingNo1 ? 1 : 0) - (a.isTrendingNo1 ? 1 : 0));
   }, [animeList]);
   
-  const trending = useMemo(() => animeList.filter(a => a.trending).slice(0, 12), [animeList]);
-  const hindiDubbed = useMemo(() => animeList.filter(a => a.isHindiDub).slice(0, 12), [animeList]);
-  const fanFavorites = useMemo(() => animeList.filter(a => a.isFanFavorite).slice(0, 12), [animeList]);
+  // Note: These lists are now curated via the "Home Layout" tab in Admin (by toggling flags)
+  const trending = useMemo(() => animeList.filter(a => a.trending).slice(0, 10), [animeList]);
+  const hindiDubbed = useMemo(() => animeList.filter(a => a.isHindiDub).slice(0, 10), [animeList]);
+  const fanFavorites = useMemo(() => animeList.filter(a => a.isFanFavorite).slice(0, 10), [animeList]);
 
   const continueWatching = useMemo(() => {
     if (!user || !user.watchHistory || user.watchHistory.length === 0) return [];
@@ -51,6 +54,25 @@ export const Home: React.FC<HomeProps> = ({ animeList, user }) => {
 
       <div className="container mx-auto px-4 mt-12 space-y-16">
         
+        {/* Request Anime Banner */}
+        <div className="rounded-2xl overflow-hidden relative h-40 md:h-32 flex items-center bg-slate-900 border border-slate-800 shadow-xl p-6 md:p-8">
+           <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-10 bg-brand-500 skew-x-12 transform translate-x-10"></div>
+           <div className="flex flex-col md:flex-row items-center justify-between w-full gap-4 relative z-10">
+              <div className="flex items-center gap-4">
+                 <div className="p-3 bg-brand-500/20 text-brand-500 rounded-xl">
+                    <MessageSquare size={32} />
+                 </div>
+                 <div>
+                    <h3 className="text-xl font-bold text-white">Can't find your anime?</h3>
+                    <p className="text-gray-400 text-sm">Tell us what to add next to our library.</p>
+                 </div>
+              </div>
+              <Button onClick={() => navigate('/request')} className="w-full md:w-auto px-8 py-3 whitespace-nowrap">
+                 Request Anime
+              </Button>
+           </div>
+        </div>
+
         {/* Continue Watching Section */}
         {continueWatching.length > 0 && (
           <section>
@@ -97,7 +119,7 @@ export const Home: React.FC<HomeProps> = ({ animeList, user }) => {
                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                      Trending Series <Flame className="text-orange-500" fill="currentColor" size={20} />
                    </h2>
-                   <p className="text-sm text-slate-500 dark:text-gray-400">What everyone is talking about</p>
+                   <p className="text-sm text-slate-500 dark:text-gray-400">Top 10 most popular</p>
                 </div>
               </div>
               <Link to="/trending">
@@ -122,7 +144,7 @@ export const Home: React.FC<HomeProps> = ({ animeList, user }) => {
                 </div>
                 <div>
                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Hindi Dubbed</h2>
-                   <p className="text-sm text-slate-500 dark:text-gray-400">Anime in your favorite language</p>
+                   <p className="text-sm text-slate-500 dark:text-gray-400">Top picks in your language</p>
                 </div>
               </div>
               <Link to="/browse">
@@ -147,7 +169,7 @@ export const Home: React.FC<HomeProps> = ({ animeList, user }) => {
                 </div>
                 <div>
                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Fan Favorites</h2>
-                   <p className="text-sm text-slate-500 dark:text-gray-400">Top picks by the AI community</p>
+                   <p className="text-sm text-slate-500 dark:text-gray-400">Top rated by community</p>
                 </div>
               </div>
               <Link to="/browse">

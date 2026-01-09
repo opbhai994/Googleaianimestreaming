@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../components/Button';
+import { registerUser } from '../services/data';
+import { AlertTriangle } from 'lucide-react';
 
 interface SignUpProps {
-  onSignUp: (name: string, email: string, pass: string) => boolean;
+  onSignUp: (user: any) => void;
 }
 
 export const SignUp: React.FC<SignUpProps> = ({ onSignUp }) => {
@@ -11,9 +13,10 @@ export const SignUp: React.FC<SignUpProps> = ({ onSignUp }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
@@ -22,11 +25,25 @@ export const SignUp: React.FC<SignUpProps> = ({ onSignUp }) => {
         return;
     }
 
-    const success = onSignUp(name, email, password);
-    if (success) {
+    setLoading(true);
+
+    try {
+      const newUser = {
+        name,
+        email,
+        password, // Warning: Storing for demo purposes. Use Firebase Auth in production.
+        isAdmin: email === 'bk.9041442950@gmail.com',
+        watchlist: [],
+        watchHistory: []
+      };
+      
+      const createdUser = await registerUser(newUser);
+      onSignUp(createdUser);
       navigate('/');
-    } else {
-      setError('Registration failed. Please try again.');
+    } catch (e: any) {
+      setError(e.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -39,6 +56,13 @@ export const SignUp: React.FC<SignUpProps> = ({ onSignUp }) => {
         </div>
         
         {error && <div className="mb-4 p-3 bg-red-100 text-red-700 text-sm rounded">{error}</div>}
+
+        <div className="mb-6 bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 flex gap-3 items-start">
+           <AlertTriangle className="text-yellow-500 flex-shrink-0" size={20} />
+           <p className="text-xs text-yellow-200">
+             <strong>IMPORTANT:</strong> Please don't forget your password and email. Since this is a demo environment, there is no password reset functionality available.
+           </p>
+        </div>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -75,7 +99,7 @@ export const SignUp: React.FC<SignUpProps> = ({ onSignUp }) => {
               placeholder="••••••••"
             />
           </div>
-          <Button type="submit" className="w-full py-3">Create Account</Button>
+          <Button type="submit" disabled={loading} className="w-full py-3">{loading ? 'Creating Account...' : 'Create Account'}</Button>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-500 dark:text-gray-400">

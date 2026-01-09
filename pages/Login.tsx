@@ -1,25 +1,32 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../components/Button';
+import { loginUser } from '../services/data';
 
 interface LoginProps {
-  onLogin: (email: string, pass: string) => boolean;
+  onLogin: (user: any) => void;
 }
 
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const success = onLogin(email, password);
-    if (success) {
+    setLoading(true);
+    
+    try {
+      const user = await loginUser(email, password);
+      onLogin(user);
       navigate('/');
-    } else {
-      setError('Invalid credentials');
+    } catch (e: any) {
+      setError(e.message || 'Invalid credentials');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -54,7 +61,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
-          <Button type="submit" className="w-full py-3">Log In</Button>
+          <Button type="submit" disabled={loading} className="w-full py-3">{loading ? 'Logging in...' : 'Log In'}</Button>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-500 dark:text-gray-400">

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { User, Anime, Episode } from '../types';
-import { saveAnime, deleteAnime, resetDatabase, importDatabase, STORAGE_KEY } from '../services/data';
+import { User, Anime, Episode, AnimeRequest } from '../types';
+import { saveAnime, deleteAnime, resetDatabase, importDatabase, getRequests, deleteRequest } from '../services/data';
 import { searchKitsuAnime, mapKitsuToAnime } from '../services/kitsu';
+import { isFirebaseInitialized } from '../services/firebase';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { 
@@ -14,14 +15,16 @@ import {
   Save,
   Settings,
   Database,
-  Copy,
-  RotateCcw,
-  ExternalLink,
-  PlayCircle,
-  Image as ImageIcon,
+  CloudLightning,
   MonitorPlay,
   Flame,
-  FileCode
+  Image as ImageIcon,
+  Wifi,
+  WifiOff,
+  Layout,
+  MessageSquare,
+  Trash2,
+  Clock
 } from 'lucide-react';
 
 interface AdminProps {
@@ -30,7 +33,7 @@ interface AdminProps {
   refreshData: () => void;
 }
 
-type Tab = 'kitsu' | 'upload' | 'add_series' | 'edit_series' | 'add_episode' | 'edit_episode' | 'maintenance';
+type Tab = 'kitsu' | 'upload' | 'home_layout' | 'requests' | 'add_series' | 'edit_series' | 'add_episode' | 'edit_episode' | 'maintenance';
 
 const emptyAnime: Anime = {
   id: '',
@@ -57,74 +60,6 @@ const toggleFields = [
   { key: 'isTrendingNo1', label: 'TRENDING #1', highlight: true },
 ] as const;
 
-// Helper to generate the full content of data.ts
-const generateDataTsContent = (animes: Anime[]) => {
-  const json = JSON.stringify(animes, null, 2);
-  return `import { Anime } from '../types';
-
-export const STORAGE_KEY = 'anime_india_data';
-
-export const MOCK_ANIMES: Anime[] = ${json};
-
-const getStoredData = (): Anime[] => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(MOCK_ANIMES));
-    return MOCK_ANIMES;
-  }
-  try {
-    return JSON.parse(stored);
-  } catch (e) {
-    return MOCK_ANIMES;
-  }
-};
-
-export const getAnimeList = async (): Promise<Anime[]> => {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(getStoredData()), 100);
-  });
-};
-
-export const getAnimeById = async (id: string): Promise<Anime | undefined> => {
-  const list = getStoredData();
-  return list.find(a => a.id === id);
-};
-
-export const saveAnime = async (anime: Anime): Promise<void> => {
-  const list = getStoredData();
-  const index = list.findIndex(a => a.id === anime.id);
-  
-  if (index >= 0) {
-    list[index] = anime;
-  } else {
-    list.push(anime);
-  }
-  
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-};
-
-export const deleteAnime = async (id: string): Promise<void> => {
-  const list = getStoredData();
-  const filtered = list.filter(a => a.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-};
-
-export const resetDatabase = async (): Promise<void> => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(MOCK_ANIMES));
-};
-
-export const importDatabase = async (json: string): Promise<void> => {
-  try {
-    const data = JSON.parse(json);
-    if (Array.isArray(data)) {
-      localStorage.setItem(STORAGE_KEY, json);
-    }
-  } catch (e) {
-    throw new Error("Invalid JSON format");
-  }
-};`;
-};
-
 export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) => {
   const [activeTab, setActiveTab] = useState<Tab>('kitsu');
   const [searchTerm, setSearchTerm] = useState('');
@@ -148,13 +83,30 @@ export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) =>
     videoUrl: '', 
     backupUrl: '', 
     mirrorUrl: '', 
-    thumbnail: '' 
+    thumbnail: '',
+    duration: '24:00' 
   });
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string>('');
 
   // Maintenance States
   const [jsonInput, setJsonInput] = useState('');
-  const [copySuccess, setCopySuccess] = useState(false);
+
+  // Requests State
+  const [requests, setRequests] = useState<AnimeRequest[]>([]);
+
+  // Home Layout State
+  const [layoutSearch, setLayoutSearch] = useState('');
+
+  useEffect(() => {
+    if (activeTab === 'requests') {
+      loadRequests();
+    }
+  }, [activeTab]);
+
+  const loadRequests = async () => {
+    const reqs = await getRequests();
+    setRequests(reqs);
+  };
 
   if (!user || !user.isAdmin) return <Navigate to="/" />;
 
@@ -228,7 +180,7 @@ export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) =>
       videoUrl: episodeData.videoUrl || '',
       backupUrl: episodeData.backupUrl || '',
       mirrorUrl: episodeData.mirrorUrl || '',
-      duration: '24:00'
+      duration: episodeData.duration || '24:00'
     };
 
     const updatedAnime = { ...anime, episodes: [...anime.episodes, newEp] };
@@ -241,7 +193,8 @@ export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) =>
       videoUrl: '', 
       backupUrl: '',
       mirrorUrl: '',
-      thumbnail: '' // Reset thumbnail so it picks up default next time if needed
+      thumbnail: '',
+      duration: '24:00'
     });
     setLoading(false);
     alert('Episode Added!');
@@ -276,42 +229,45 @@ export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) =>
     }
   };
 
-  const handleExportDB = () => {
-    const data = localStorage.getItem(STORAGE_KEY);
-    if (data) {
-      navigator.clipboard.writeText(data);
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
-      alert("Database JSON copied to clipboard!");
+  const toggleLayoutFlag = async (anime: Anime, flag: 'trending' | 'isFanFavorite' | 'isHindiDub') => {
+    // Optimistic UI update
+    const updated = { ...anime, [flag]: !anime[flag] };
+    await saveAnime(updated);
+    refreshData();
+  };
+
+  const handleDeleteRequest = async (id: string) => {
+    if(window.confirm('Delete this request?')) {
+      await deleteRequest(id);
+      loadRequests();
     }
   };
 
   const handleImportDB = async () => {
     if (!jsonInput.trim()) return;
-    if (window.confirm("This will overwrite your current local data. Continue?")) {
+    if (window.confirm("This will overwrite existing items with same IDs. Continue?")) {
       try {
+        setLoading(true);
         await importDatabase(jsonInput);
         await refreshData();
         setJsonInput('');
+        setLoading(false);
         alert("Database Imported Successfully!");
       } catch (e) {
+        setLoading(false);
         alert("Invalid JSON data provided.");
       }
     }
   };
 
   const handleResetDB = async () => {
-    if (window.confirm("Reset everything to default state? This cannot be undone.")) {
+    if (window.confirm("This will upload the default MOCK data to Firestore. Use this only if your database is empty. Continue?")) {
+      setLoading(true);
       await resetDatabase();
       await refreshData();
-      alert("Database Reset Successfully!");
+      setLoading(false);
+      alert("Mock Data Uploaded to Cloud Successfully!");
     }
-  };
-
-  const handleCopyDataTs = () => {
-    const code = generateDataTsContent(animeList);
-    navigator.clipboard.writeText(code);
-    alert("Full services/data.ts code copied to clipboard!");
   };
 
   const SidebarItem = ({ id, label, icon: Icon }: { id: Tab, label: string, icon: any }) => (
@@ -333,11 +289,13 @@ export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) =>
       <aside className="w-full md:w-64 bg-slate-950 border-r border-slate-800 flex-shrink-0">
         <div className="py-4">
           <SidebarItem id="kitsu" label="Kitsu API" icon={DownloadCloud} />
+          <SidebarItem id="home_layout" label="Home Layout" icon={Layout} />
+          <SidebarItem id="requests" label="Requests" icon={MessageSquare} />
           <SidebarItem id="add_series" label="Add Series" icon={PlusSquare} />
           <SidebarItem id="edit_series" label="Edit Series" icon={Settings} />
           <SidebarItem id="add_episode" label="Add Episode" icon={PlusCircle} />
           <SidebarItem id="edit_episode" label="Edit Episode" icon={Edit3} />
-          <SidebarItem id="maintenance" label="Maintenance" icon={Database} />
+          <SidebarItem id="maintenance" label="Database" icon={Database} />
           <div className="mt-8 border-t border-slate-800 pt-2">
             <button onClick={() => navigate('/')} className="w-full flex items-center gap-3 px-6 py-4 text-sm font-medium text-red-500 hover:bg-red-900/10 transition-colors">
               <LogOut size={18} /> Logout
@@ -347,7 +305,7 @@ export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) =>
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 bg-black/20">
-        <header className="bg-slate-900 h-16 border-b border-slate-800 flex items-center px-8 justify-between">
+        <header className="bg-slate-900 h-16 border-b border-slate-800 flex items-center px-8 justify-between gap-4">
            <div className="flex items-center gap-3 text-slate-400 w-full max-w-md">
               <Search size={20} />
               <input 
@@ -357,80 +315,147 @@ export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) =>
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
            </div>
-           {loading && <div className="text-brand-500 font-bold text-sm animate-pulse">Processing...</div>}
+           
+           <div className="flex items-center gap-4">
+             {loading && <div className="text-brand-500 font-bold text-sm animate-pulse flex items-center gap-2"><CloudLightning size={14}/> Syncing...</div>}
+           </div>
         </header>
 
         <div className="p-4 md:p-8 overflow-y-auto flex-1 text-gray-100">
+          
+          {/* --- REQUESTS TAB --- */}
+          {activeTab === 'requests' && (
+             <div className="max-w-4xl mx-auto animate-fadeIn">
+               <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2"><MessageSquare /> User Requests</h2>
+               <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+                 {requests.length === 0 ? (
+                   <div className="p-8 text-center text-gray-500">No requests yet.</div>
+                 ) : (
+                   <table className="w-full text-left">
+                     <thead className="bg-slate-800 text-xs uppercase text-gray-400">
+                       <tr>
+                         <th className="p-4">Anime Name</th>
+                         <th className="p-4">Notes</th>
+                         <th className="p-4">Requested By</th>
+                         <th className="p-4 text-right">Actions</th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-800">
+                       {requests.map(req => (
+                         <tr key={req.id} className="hover:bg-slate-800/50">
+                            <td className="p-4 font-bold text-white">{req.animeName}</td>
+                            <td className="p-4 text-gray-400 text-sm max-w-xs">{req.additionalInfo || '-'}</td>
+                            <td className="p-4 text-sm">
+                               <div className="font-medium text-gray-300">{req.userName || 'Anonymous'}</div>
+                               <div className="text-xs text-gray-600">{new Date(req.requestedAt).toLocaleDateString()}</div>
+                            </td>
+                            <td className="p-4 text-right">
+                              <Button size="sm" variant="ghost" className="text-red-500 hover:bg-red-500/10" onClick={() => handleDeleteRequest(req.id)}>
+                                <Trash2 size={16}/>
+                              </Button>
+                            </td>
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                 )}
+               </div>
+             </div>
+          )}
+
+          {/* --- HOME LAYOUT TAB --- */}
+          {activeTab === 'home_layout' && (
+             <div className="animate-fadeIn">
+               <div className="flex justify-between items-center mb-6">
+                 <h2 className="text-2xl font-bold text-white">Curate Home Page</h2>
+                 <input 
+                    placeholder="Search anime..." 
+                    className="p-2 rounded bg-slate-800 border border-slate-700 text-sm"
+                    value={layoutSearch}
+                    onChange={(e) => setLayoutSearch(e.target.value)}
+                 />
+               </div>
+               
+               <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+                 <div className="overflow-x-auto">
+                   <table className="w-full text-left">
+                     <thead className="bg-slate-800 text-xs uppercase text-gray-400">
+                       <tr>
+                         <th className="p-4">Anime Title</th>
+                         <th className="p-4 text-center">Trending</th>
+                         <th className="p-4 text-center">Fan Favorite</th>
+                         <th className="p-4 text-center">Hindi Dubbed</th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-800">
+                       {animeList.filter(a => a.title.toLowerCase().includes(layoutSearch.toLowerCase())).map(anime => (
+                         <tr key={anime.id} className="hover:bg-slate-800/50">
+                           <td className="p-4 flex items-center gap-3">
+                             <img src={anime.thumbnail} className="w-10 h-14 object-cover rounded" />
+                             <span className="font-bold text-gray-200">{anime.title}</span>
+                           </td>
+                           <td className="p-4 text-center">
+                              <input type="checkbox" checked={anime.trending} onChange={() => toggleLayoutFlag(anime, 'trending')} className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-brand-500 focus:ring-brand-500"/>
+                           </td>
+                           <td className="p-4 text-center">
+                              <input type="checkbox" checked={anime.isFanFavorite} onChange={() => toggleLayoutFlag(anime, 'isFanFavorite')} className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-brand-500 focus:ring-brand-500"/>
+                           </td>
+                           <td className="p-4 text-center">
+                              <input type="checkbox" checked={anime.isHindiDub} onChange={() => toggleLayoutFlag(anime, 'isHindiDub')} className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-brand-500 focus:ring-brand-500"/>
+                           </td>
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                 </div>
+               </div>
+             </div>
+          )}
+
           {activeTab === 'maintenance' && (
             <div className="max-w-4xl mx-auto space-y-8 animate-fadeIn">
                <div className="bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-800">
                   <div className="flex items-center gap-3 mb-6">
                     <Database className="text-brand-500" size={24} />
-                    <h2 className="text-2xl font-bold text-white">Global Sync & Backup</h2>
+                    <h2 className="text-2xl font-bold text-white">Database Management</h2>
                   </div>
                   
-                  <div className="p-4 bg-blue-900/20 text-blue-300 rounded-lg text-sm mb-8 flex gap-3">
-                    <ExternalLink className="flex-shrink-0" size={20} />
-                    <p>
-                      <strong>Hosting Tip:</strong> Click "Copy File Content" below and replace the entire content of <code>services/data.ts</code> in your project before deploying.
+                  <div className={`p-4 rounded-lg text-sm mb-8 border ${isFirebaseInitialized ? 'bg-green-900/20 text-green-300 border-green-500/30' : 'bg-amber-900/20 text-amber-300 border-amber-500/30'}`}>
+                    <p className="flex flex-col gap-1">
+                      <strong className="flex items-center gap-2">
+                        {isFirebaseInitialized ? <Wifi size={16}/> : <WifiOff size={16}/>}
+                        Current Mode: {isFirebaseInitialized ? 'Live Cloud Database (Firestore)' : 'Local Browser Storage (Demo Mode)'}
+                      </strong>
+                      <span className="opacity-80">
+                      {isFirebaseInitialized 
+                        ? "You are connected to Google Firebase. Changes you make here are live for all users instantly."
+                        : "You are currently in Offline Demo Mode. Changes are saved only to your browser's local storage. To go live, configure your API keys in services/firebase.ts."}
+                      </span>
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                      <div className="space-y-4">
-                        <h3 className="font-bold text-white">Export Current Data (JSON)</h3>
-                        <Button onClick={handleExportDB} variant="outline" className="w-full gap-2">
-                          <Copy size={18} /> {copySuccess ? 'Copied!' : 'Copy JSON'}
-                        </Button>
-                     </div>
-
-                     <div className="space-y-4">
-                        <h3 className="font-bold text-white">Restore Factory Defaults</h3>
-                        <Button onClick={handleResetDB} variant="ghost" className="w-full gap-2 text-red-500 hover:bg-red-900/10">
-                          <RotateCcw size={18} /> Reset All Local Data
+                        <h3 className="font-bold text-white">Initialize Database</h3>
+                        <p className="text-xs text-gray-400">If your database is empty, click this to upload the initial Mock Data.</p>
+                        <Button onClick={handleResetDB} disabled={loading} variant="primary" className="w-full gap-2">
+                          <CloudLightning size={18} /> {loading ? 'Uploading...' : 'Seed Default Data'}
                         </Button>
                      </div>
                   </div>
                </div>
 
                <div className="bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-800">
-                  <h3 className="font-bold text-white mb-4">Manual Import</h3>
+                  <h3 className="font-bold text-white mb-4">Bulk JSON Import</h3>
                   <textarea 
                     className="w-full h-32 p-4 rounded-lg bg-slate-800 border border-slate-700 text-white font-mono text-xs mb-4"
                     placeholder='Paste JSON array here...'
                     value={jsonInput}
                     onChange={(e) => setJsonInput(e.target.value)}
                   />
-                  <Button onClick={handleImportDB} className="w-full" disabled={!jsonInput.trim()}>
-                    Import Data from JSON
+                  <Button onClick={handleImportDB} disabled={loading} className="w-full">
+                    Import Data
                   </Button>
-               </div>
-
-               {/* New Section: Data.ts Source Code */}
-               <div className="bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-800">
-                  <div className="flex items-center justify-between mb-4">
-                     <div>
-                        <h3 className="font-bold text-white text-xl flex items-center gap-2">
-                          <FileCode className="text-green-500" size={24} /> 
-                          services/data.ts Source Code
-                        </h3>
-                        <p className="text-gray-400 text-sm mt-1">
-                          Copy this entire code block and replace the content of <code className="text-brand-500 font-mono">services/data.ts</code> to make your changes permanent for hosting.
-                        </p>
-                     </div>
-                     <Button onClick={handleCopyDataTs} variant="primary" className="gap-2 bg-green-600 hover:bg-green-700">
-                        <Copy size={18} /> Copy File Content
-                     </Button>
-                  </div>
-                  
-                  <div className="relative">
-                     <textarea 
-                        readOnly
-                        className="w-full h-96 p-4 rounded-lg bg-slate-950 border border-slate-700 text-green-400 font-mono text-xs focus:ring-2 focus:ring-green-900 outline-none"
-                        value={generateDataTsContent(animeList)}
-                        onClick={(e) => e.currentTarget.select()}
-                     />
-                  </div>
                </div>
             </div>
           )}
@@ -486,8 +511,8 @@ export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) =>
                            <select className="w-full p-2.5 rounded-lg border bg-slate-800 text-white border-slate-700" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})}><option value="Ongoing">Ongoing</option><option value="Completed">Completed</option></select>
                         </div>
                         <div>
-                           <label className="block text-sm font-medium mb-1 text-gray-300">Rating (0-5)</label>
-                           <input type="number" step="0.1" className="w-full p-2.5 rounded-lg border bg-slate-800 text-white border-slate-700" value={formData.rating} onChange={e => setFormData({...formData, rating: parseFloat(e.target.value)})} placeholder="4.5" />
+                           <label className="block text-sm font-medium mb-1 text-gray-300">Rating (0.0 - 10.0)</label>
+                           <input type="number" step="0.1" min="0" max="10" className="w-full p-2.5 rounded-lg border bg-slate-800 text-white border-slate-700" value={formData.rating} onChange={e => setFormData({...formData, rating: parseFloat(e.target.value)})} placeholder="9.5" />
                         </div>
                       </div>
 
@@ -579,46 +604,40 @@ export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) =>
                           <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Episode #</label>
                           <input type="number" required min="1" className="w-full p-2.5 rounded-lg border bg-slate-800 text-white border-slate-700" value={episodeData.number} onChange={e => setEpisodeData({...episodeData, number: parseInt(e.target.value)})} placeholder="1" />
                         </div>
-                        <div className="col-span-2">
+                        <div>
+                          <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Duration</label>
+                          <input type="text" className="w-full p-2.5 rounded-lg border bg-slate-800 text-white border-slate-700" value={episodeData.duration} onChange={e => setEpisodeData({...episodeData, duration: e.target.value})} placeholder="24:00" />
+                        </div>
+                        <div className="col-span-3">
                           <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Episode Title</label>
                           <input type="text" className="w-full p-2.5 rounded-lg border bg-slate-800 text-white border-slate-700" value={episodeData.title} onChange={e => setEpisodeData({...episodeData, title: e.target.value})} placeholder="Enter title..." />
                         </div>
                      </div>
 
                      <div className="space-y-4 border-t border-slate-800 pt-4">
-                       <h3 className="font-bold flex items-center gap-2 text-white"><MonitorPlay size={18} /> Video Sources</h3>
+                       <h3 className="font-bold flex items-center gap-2 text-white"><MonitorPlay size={18} /> Video Sources & Previews</h3>
                        
-                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                          {/* Separated Main, Backup, and Mirror URL Section */}
-                          <div className="space-y-4 bg-black/20 p-4 rounded-lg border border-slate-800">
-                            <div>
-                                <label className="block text-sm font-medium mb-1 text-brand-500">Main Video URL (Required)</label>
-                                <input type="url" required className="w-full p-2.5 rounded-lg border bg-slate-800 text-white border-slate-700 focus:border-brand-500" value={episodeData.videoUrl} onChange={e => setEpisodeData({...episodeData, videoUrl: e.target.value})} placeholder="https://..." />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1 text-gray-300">Backup URL (Optional)</label>
-                                <input type="url" className="w-full p-2.5 rounded-lg border bg-slate-800 text-white border-slate-700" value={episodeData.backupUrl} onChange={e => setEpisodeData({...episodeData, backupUrl: e.target.value})} placeholder="https://..." />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1 text-gray-300">Mirror URL (Optional)</label>
-                                <input type="url" className="w-full p-2.5 rounded-lg border bg-slate-800 text-white border-slate-700" value={episodeData.mirrorUrl} onChange={e => setEpisodeData({...episodeData, mirrorUrl: e.target.value})} placeholder="https://..." />
-                            </div>
-                          </div>
-
-                          {/* Separate Iframe Player Preview */}
-                          <div className="bg-black/40 rounded-lg p-4 flex flex-col items-center justify-center border border-dashed border-slate-700">
-                             {episodeData.videoUrl ? (
-                               <div className="w-full aspect-video bg-black rounded overflow-hidden shadow-lg">
-                                 <iframe src={episodeData.videoUrl} className="w-full h-full" allowFullScreen frameBorder="0"></iframe>
+                       <div className="grid grid-cols-1 gap-6">
+                          {['videoUrl', 'backupUrl', 'mirrorUrl'].map((key) => {
+                             const url = episodeData[key as keyof Episode] as string;
+                             const label = key === 'videoUrl' ? 'Main Server' : key === 'backupUrl' ? 'Backup Server' : 'Mirror Server';
+                             
+                             return (
+                               <div key={key} className="grid grid-cols-1 lg:grid-cols-2 gap-4 bg-black/20 p-4 rounded-lg border border-slate-800">
+                                  <div>
+                                     <label className={`block text-sm font-medium mb-1 ${key === 'videoUrl' ? 'text-brand-500' : 'text-gray-300'}`}>{label}</label>
+                                     <input type="url" className="w-full p-2.5 rounded-lg border bg-slate-800 text-white border-slate-700" value={url || ''} onChange={e => setEpisodeData({...episodeData, [key]: e.target.value})} placeholder="https://..." />
+                                  </div>
+                                  <div className="bg-black rounded overflow-hidden aspect-video border border-slate-700 flex items-center justify-center">
+                                     {url ? (
+                                        <iframe src={url} className="w-full h-full" frameBorder="0" allowFullScreen></iframe>
+                                     ) : (
+                                        <div className="text-gray-500 text-xs">No Preview</div>
+                                     )}
+                                  </div>
                                </div>
-                             ) : (
-                               <div className="text-center text-gray-400">
-                                 <MonitorPlay size={48} className="mx-auto mb-2 opacity-50"/>
-                                 <p className="text-sm">Enter Main Video URL to preview player</p>
-                               </div>
-                             )}
-                             <p className="text-xs text-gray-500 mt-2">Test your video link here before saving.</p>
-                          </div>
+                             );
+                          })}
                        </div>
                      </div>
 
@@ -669,7 +688,7 @@ export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) =>
                        <form onSubmit={handleUpdateEpisode} className="p-6 bg-brand-900/10 rounded-xl space-y-4 animate-fadeIn border border-brand-900/30">
                           <h3 className="font-bold text-lg text-white mb-4">Editing Episode</h3>
                           
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                              <div>
                                <label className="text-xs uppercase font-bold text-gray-500">Title</label>
                                <input type="text" className="w-full p-2 rounded border bg-slate-800 text-white border-slate-700" value={episodeData.title} onChange={e => setEpisodeData({...episodeData, title: e.target.value})} />
@@ -678,24 +697,29 @@ export const Admin: React.FC<AdminProps> = ({ user, animeList, refreshData }) =>
                                <label className="text-xs uppercase font-bold text-gray-500">Thumbnail</label>
                                <input type="text" className="w-full p-2 rounded border bg-slate-800 text-white border-slate-700" value={episodeData.thumbnail} onChange={e => setEpisodeData({...episodeData, thumbnail: e.target.value})} />
                              </div>
-                          </div>
-
-                          <div className="space-y-3 pt-2">
-                             <label className="text-xs uppercase font-bold text-gray-500">Video Sources</label>
-                             <input type="url" placeholder="Main URL" className="w-full p-2 rounded border bg-slate-800 text-white border-slate-700" value={episodeData.videoUrl} onChange={e => setEpisodeData({...episodeData, videoUrl: e.target.value})} />
-                             <input type="url" placeholder="Backup URL" className="w-full p-2 rounded border bg-slate-800 text-white border-slate-700" value={episodeData.backupUrl} onChange={e => setEpisodeData({...episodeData, backupUrl: e.target.value})} />
-                             <input type="url" placeholder="Mirror URL" className="w-full p-2 rounded border bg-slate-800 text-white border-slate-700" value={episodeData.mirrorUrl} onChange={e => setEpisodeData({...episodeData, mirrorUrl: e.target.value})} />
-                          </div>
-
-                          {/* Preview in Edit Mode */}
-                          {episodeData.videoUrl && (
-                             <div className="mt-2">
-                                <p className="text-xs text-gray-500 mb-1">Preview:</p>
-                                <div className="aspect-video w-48 bg-black rounded overflow-hidden">
-                                   <iframe src={episodeData.videoUrl} className="w-full h-full" frameBorder="0"></iframe>
-                                </div>
+                             <div>
+                               <label className="text-xs uppercase font-bold text-gray-500">Duration</label>
+                               <input type="text" className="w-full p-2 rounded border bg-slate-800 text-white border-slate-700" value={episodeData.duration} onChange={e => setEpisodeData({...episodeData, duration: e.target.value})} />
                              </div>
-                          )}
+                          </div>
+
+                          <div className="space-y-4 pt-2">
+                             <label className="text-xs uppercase font-bold text-gray-500">Video Sources</label>
+                             <div className="grid grid-cols-1 gap-4">
+                                {['videoUrl', 'backupUrl', 'mirrorUrl'].map((key) => (
+                                  <div key={key} className="flex gap-4 items-center">
+                                    <input 
+                                      type="url" 
+                                      placeholder={key === 'videoUrl' ? 'Main URL' : key} 
+                                      className="flex-1 p-2 rounded border bg-slate-800 text-white border-slate-700" 
+                                      value={episodeData[key as keyof Episode] as string || ''} 
+                                      onChange={e => setEpisodeData({...episodeData, [key]: e.target.value})} 
+                                    />
+                                    {/* Small Preview Button/Icon could go here, currently inline preview below */}
+                                  </div>
+                                ))}
+                             </div>
+                          </div>
 
                           <div className="flex justify-end gap-2 pt-4 border-t border-brand-800/30">
                              <Button type="button" variant="ghost" onClick={() => setSelectedEpisodeId('')}>Cancel</Button>

@@ -1,27 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, Search, User as UserIcon, LogOut, Shield, Globe } from 'lucide-react';
-import { User } from '../types';
+import { Menu, Search, User as UserIcon, LogOut, Shield, Globe, X } from 'lucide-react';
+import { User, Anime } from '../types';
 import { Button } from './Button';
 
 interface NavbarProps {
   user: User | null;
+  animeList?: Anime[]; // Optional to prevent breaking if not passed immediately
   onLogout: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
+export const Navbar: React.FC<NavbarProps> = ({ user, animeList = [], onLogout }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [lang, setLang] = useState<'EN' | 'HI'>('HI');
   const navigate = useNavigate();
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
       navigate(`/browse?search=${encodeURIComponent(searchQuery)}`);
       setSearchQuery('');
+      setShowSuggestions(false);
     }
   };
+
+  const filteredSuggestions = searchQuery.length > 1 
+    ? animeList.filter(a => a.title.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 5)
+    : [];
 
   return (
     <nav className="sticky top-0 z-50 w-full bg-slate-950 border-b border-slate-800">
@@ -47,19 +66,65 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
           </div>
         </div>
 
-        {/* Search Bar */}
-        <form onSubmit={handleSearch} className="flex-1 max-w-md hidden sm:flex relative">
-          <input
-            type="text"
-            placeholder="Search for anime, characters..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-900 border-none rounded-md py-2.5 pl-4 pr-10 text-sm focus:ring-2 focus:ring-brand-500 text-white transition-all"
-          />
-          <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-500 transition-colors">
-            <Search size={18} />
-          </button>
-        </form>
+        {/* Search Bar with Suggestions */}
+        <div className="flex-1 max-w-md hidden sm:block relative" ref={searchRef}>
+          <form onSubmit={handleSearch} className="relative">
+            <input
+              type="text"
+              placeholder="Search for anime, characters..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              className="w-full bg-slate-900 border-none rounded-md py-2.5 pl-4 pr-10 text-sm focus:ring-2 focus:ring-brand-500 text-white transition-all"
+            />
+            {searchQuery ? (
+               <button type="button" onClick={() => { setSearchQuery(''); setShowSuggestions(false); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
+                 <X size={16} />
+               </button>
+            ) : (
+               <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-500 transition-colors">
+                 <Search size={18} />
+               </button>
+            )}
+          </form>
+
+          {/* Search Suggestions Dropdown */}
+          {showSuggestions && searchQuery.length > 1 && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden z-50">
+               {filteredSuggestions.length > 0 ? (
+                 <ul>
+                   {filteredSuggestions.map(anime => (
+                     <li key={anime.id}>
+                       <Link 
+                         to={`/anime/${anime.id}`} 
+                         onClick={() => { setSearchQuery(''); setShowSuggestions(false); }}
+                         className="flex items-center gap-3 p-3 hover:bg-slate-800 transition-colors border-b border-slate-800 last:border-0"
+                       >
+                         <img src={anime.thumbnail} alt={anime.title} className="w-10 h-14 object-cover rounded" />
+                         <div className="flex flex-col">
+                           <span className="text-sm font-bold text-gray-100 line-clamp-1">{anime.title}</span>
+                           <span className="text-xs text-gray-400">{anime.releaseYear} • {anime.rating} ★</span>
+                         </div>
+                       </Link>
+                     </li>
+                   ))}
+                   <li className="p-2 bg-slate-950 text-center">
+                     <button onClick={handleSearch} className="text-xs text-brand-500 font-bold uppercase tracking-wider hover:underline">
+                        View All Results
+                     </button>
+                   </li>
+                 </ul>
+               ) : (
+                 <div className="p-4 text-center text-gray-500 text-sm">
+                   No results found for "{searchQuery}"
+                 </div>
+               )}
+            </div>
+          )}
+        </div>
 
         {/* Right Actions */}
         <div className="flex items-center gap-2 md:gap-4">

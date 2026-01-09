@@ -45,11 +45,10 @@ export const Watch: React.FC<WatchProps> = ({ user, updateHistory }) => {
     if (user && animeId && episodeId && currentEp) {
       updateHistory(animeId, episodeId);
     }
-  }, [animeId, episodeId, !!user, updateHistory, currentEp]); 
+  }, [animeId, episodeId, !!user, currentEp?.id]); // Only run when episode ID actually changes
 
   const seasons = useMemo(() => {
     if (!anime) return [];
-    // Fix: Explicitly type sort parameters to avoid arithmetic operation errors
     return Array.from(new Set(anime.episodes.map(e => e.seasonNumber))).sort((a: number, b: number) => a - b);
   }, [anime]);
 
@@ -221,6 +220,7 @@ export const Watch: React.FC<WatchProps> = ({ user, updateHistory }) => {
                    <span className={`text-sm font-medium truncate ${ep.id === currentEp.id ? 'text-white' : 'text-gray-300 group-hover:text-white'}`}>
                      {ep.title}
                    </span>
+                   <span className="text-[10px] text-gray-600 self-end mt-1">{ep.duration}</span>
                 </Link>
               ))}
            </div>
